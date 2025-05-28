@@ -183,6 +183,9 @@ def format_schedule_output(input_data: NewScheduleInput, result: dict, db: Sessi
 
 # 경로 최적화 input
 def enrich_input_places(places_input, db: Session):
+    def trim_time_format(time_str: str) -> str:
+        return time_str[:5] if time_str and len(time_str) >= 5 else "00:00"
+
     enriched_places = []
     for place in places_input:
         db_place = None
@@ -211,12 +214,15 @@ def enrich_input_places(places_input, db: Session):
                 print(f"✅ [카테고리매핑] {place.name} → category: {matched_category}")
             else:
                 print(f"⚠️ [카테고리매핑실패] {place.name} → category 원본: {place.category} → 매핑 실패")
+
         if not db_place:
             print(f"❌ [DB조회실패] {place.name} → 어떤 테이블에서도 찾지 못함")
 
         if db_place:
-            open_time = db_place.open_time or "00:00"
-            close_time = "23:59" if db_place.close_time == "24:00" else (db_place.close_time or "23:59")
+            open_time = trim_time_format(db_place.open_time or "00:00")
+            close_time_raw = db_place.close_time or "23:59"
+            close_time = trim_time_format("23:59" if close_time_raw == "24:00" else close_time_raw)
+
             enriched_places.append({
                 "id": db_place.id,
                 "name": db_place.name,

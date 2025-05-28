@@ -21,3 +21,7 @@ class JejuTransport(Base):
     service_time = Column(String(255))
     closed_days = Column(String(255))
     image_url = Column(Text)
+
+    @property
+    def id(self):
+        return self.transport_id
