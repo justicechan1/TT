@@ -25,6 +25,7 @@ class HashtagOutput(BaseModel):
 
 class MoveInfo(BaseModel):
     name: str
+    category: str
     x_cord: float
     y_cord: float
     similarity: Optional[float] = None

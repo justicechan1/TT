@@ -86,17 +86,18 @@ def search_places(name: str = Query(..., min_length=1), db: Session = Depends(ge
 
     return PlaceSearchOutput(search=sorted_unique)
 
-# ---------- /data ----------
+# ---------- /select_place ----------
 @router.get("/select_place", response_model=PlaceDataResponse)
 def get_place_detail(name: str = Query(..., min_length=1), db: Session = Depends(get_db)):
     place_name = name.strip()
-    for _, model in PLACE_MODELS.items():
+    for model_type, model in PLACE_MODELS.items():
         place = db.query(model).filter(model.name == place_name).first()
         if place:
             image_urls = fetch_image_urls(db, model, place_name)
             return PlaceDataResponse(
                 places=PlaceDataResult(
                     name=place.name,
+                    category=getattr(place, "category", model_type),
                     address=place.address,
                     x_cord=getattr(place, "x_cord", None), 
                     y_cord=getattr(place, "y_cord", None),

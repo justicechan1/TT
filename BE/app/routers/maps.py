@@ -161,6 +161,9 @@ def get_top_place_ids(selected_embeddings, embedding_logs):
 # ---------- 최종 MoveInfo 응답 생성 ----------
 def build_filtered_move_response_with_similarity(db, PlaceModel, pk_field_name, top_results):
     move_infos = []
+
+    category = next((k for k, v in PLACE_MODELS.items() if v[0] == PlaceModel), "unknown")
+
     for res in top_results:
         pid = res["place_id"]
         similarity = res["similarity"]
@@ -168,6 +171,7 @@ def build_filtered_move_response_with_similarity(db, PlaceModel, pk_field_name, 
         if db_place:
             move_infos.append({
                 "name": db_place.name,
+                "category": category,
                 "x_cord": float(db_place.x_cord),
                 "y_cord": float(db_place.y_cord),
                 "similarity": similarity
