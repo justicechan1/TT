@@ -87,7 +87,7 @@ def search_places(name: str = Query(..., min_length=1), db: Session = Depends(ge
     return PlaceSearchOutput(search=sorted_unique)
 
 # ---------- /data ----------
-@router.get("/data", response_model=PlaceDataResponse)
+@router.get("/select_place", response_model=PlaceDataResponse)
 def get_place_detail(name: str = Query(..., min_length=1), db: Session = Depends(get_db)):
     place_name = name.strip()
     for _, model in PLACE_MODELS.items():
