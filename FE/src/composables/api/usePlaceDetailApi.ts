@@ -26,7 +26,7 @@ export function usePlaceDetailApi() {
     try {
       const resp = await postData<PlaceDetailResponse>(
         '/api/places/select_place',
-        body
+        { name: body.name } 
       );
 
       if (!resp.success || !resp.data) {

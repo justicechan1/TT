@@ -157,17 +157,20 @@ def format_schedule_output(input_data: NewScheduleInput, result: dict, db: Sessi
         display_name = strip_suffix_tags(original_name)
 
         db_place = None
-        for model in PLACE_MODELS.values():
+        matched_category = "unknown"
+        for category, model in PLACE_MODELS.items():
             db_place = db.query(model).filter(
                 func.trim(func.lower(model.name)) == func.trim(func.lower(cleaned_name))
             ).first()
             if db_place:
+                matched_category = category
                 break
 
         address = getattr(db_place, "address", "unknown") if db_place else "unknown"
 
         formatted_places.append({
             "name": display_name,
+            "category": matched_category,
             "address": address,
             "arrival_str": visit["arrival_str"],
             "departure_str": visit["departure_str"],
@@ -247,8 +250,11 @@ def generate_schedule(input_data: NewScheduleInput, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="일정을 먼저 초기화해야 합니다.")
 
     user_data = user_schedules[user_id]
-    start_date = datetime.strptime(user_data["date"].start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(user_data["date"].end_date, "%Y-%m-%d")
+    date_info = user_data["date"]
+    user_pref = user_data["user"]
+
+    start_date = datetime.strptime(date_info.start_date, "%Y-%m-%d")
+    end_date = datetime.strptime(date_info.end_date, "%Y-%m-%d")
     total_days = (end_date - start_date).days + 1
 
     i = int(next(iter(input_data.places_by_day.keys())))
@@ -256,16 +262,28 @@ def generate_schedule(input_data: NewScheduleInput, db: Session = Depends(get_db
     enriched_places = enrich_input_places(places_input, db)
 
     current_date = start_date + timedelta(days=i - 1)
+
+    is_first_day = (i == 1)
+    is_last_day = (i == total_days)
+
     day_info_dict = {
-        "is_first_day": (i == 1),
-        "is_last_day": (i == total_days),
+        "is_first_day": is_first_day,
+        "is_last_day": is_last_day,
         "date": current_date.strftime("%Y-%m-%d"),
-        "weekday": WEEKDAYS_KO[current_date.weekday()]
+        "weekday": WEEKDAYS_KO[current_date.weekday()],
     }
 
+    user_pref_dict = user_pref.dict()
+
+    if is_first_day:
+        user_pref_dict["start_time"] = date_info.arrival_time
+    if is_last_day:
+        user_pref_dict["end_time"] = date_info.departure_time
+
+# input_dict에 수정된 user_pref_dict 사용
     input_dict = {
         "places": enriched_places,
-        "user": user_data["user"].dict(),
+        "user": user_pref_dict,
         "day_info": day_info_dict
     }
 

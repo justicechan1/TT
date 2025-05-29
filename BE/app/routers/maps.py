@@ -159,10 +159,8 @@ def get_top_place_ids(selected_embeddings, embedding_logs):
     return top_ids
 
 # ---------- 최종 MoveInfo 응답 생성 ----------
-def build_filtered_move_response_with_similarity(db, PlaceModel, pk_field_name, top_results):
+def build_filtered_move_response_with_similarity(db, PlaceModel, pk_field_name, top_results, category: str):
     move_infos = []
-
-    category = next((k for k, v in PLACE_MODELS.items() if v[0] == PlaceModel), "unknown")
 
     for res in top_results:
         pid = res["place_id"]

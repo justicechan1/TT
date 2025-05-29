@@ -27,7 +27,7 @@ class PlaceSearchOutput(BaseModel):
 # ------------------- /api/places/data -------------------
 class PlaceDataResult(BaseModel):
     name: str
-    category: str
+    category: Optional[str] = None
     address: str
     x_cord: Optional[float] = None
     y_cord: Optional[float] = None

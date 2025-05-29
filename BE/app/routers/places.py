@@ -10,6 +10,7 @@ from app.models.jeju_cafe import JejuCafe
 from app.models.jeju_restaurant import JejuRestaurant
 from app.models.jeju_tourism import JejuTourism
 from app.models.jeju_hotel import JejuHotel
+from app.models.jeju_transport import JejuTransport
 from app.schemas.places import (
     PlaceSearchOutput, PlaceSearchResult,PlaceNameOnly,
     PlaceDataResponse, PlaceDataResult,
@@ -21,7 +22,8 @@ PLACE_MODELS = {
     "cafe": JejuCafe,
     "restaurant": JejuRestaurant,
     "tourism": JejuTourism,
-    "hotel": JejuHotel
+    "hotel": JejuHotel,
+    "transport": JejuTransport
 }
 
 # 이미지 URL 추출 함수
