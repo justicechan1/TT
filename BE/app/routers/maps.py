@@ -200,6 +200,6 @@ def get_move_candidates(input_data: MoveInput, db: Session = Depends(get_db)):
 
     # 중복제거후 유사도 높은 순으로
     unique_results = {res["place_id"]: res for res in sorted(all_top_results, key=lambda x: x["similarity"], reverse=True)}
-    filtered_places = build_filtered_move_response_with_similarity(db, PlaceModel, pk_field_name, list(unique_results.values()))
+    filtered_places = build_filtered_move_response_with_similarity(db, PlaceModel, pk_field_name, list(unique_results.values()), category)
 
     return MoveResponse(select_hashtage=filtered_places)
