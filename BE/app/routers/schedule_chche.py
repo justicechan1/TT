@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+from pydantic import BaseModel, Field
 import re,json
 from app.database import get_db
 from app.models.jeju_cafe import JejuCafe
@@ -12,7 +14,7 @@ from app.models.jeju_transport import JejuTransport
 from app.cache import user_schedules
 from app.schemas import (
     ScheduleInitInput, ScheduleInitOutput, UserPreference,
-    NewScheduleInput
+    NewScheduleInput, PlacesByDayInput, ItineraryOut, ItineraryPlaceOut
 )
 from TripScheduler.tripscheduler.scheduler_api import schedule_trip
 
@@ -242,8 +244,8 @@ def enrich_input_places(places_input, db: Session):
             })
     return enriched_places
 
-# ------------------- /schedule -------------------
-@router.post("/schedule")
+# ------------------- /schedul -------------------
+@router.post("/schedul")
 def generate_schedule(input_data: NewScheduleInput, db: Session = Depends(get_db)):
     user_id = input_data.user_id
     if user_id not in user_schedules:
@@ -296,3 +298,94 @@ def generate_schedule(input_data: NewScheduleInput, db: Session = Depends(get_db
         print(f"- {v['place']} (도착: {v['arrival_str']}, 소요: {v['stay_duration']})")
 
     return format_schedule_output(input_data, result, db)
+
+
+# ------------------- /itinerary -------------------
+_MODEL_ORDER = [
+    ("landmark", JejuTourism),     # 관광 우선
+    ("restaurant", JejuRestaurant),
+    ("cafe", JejuCafe),
+    ("accommodation", JejuHotel),
+]
+
+def _find_place_by_name(db: Session, name: str):
+    """이름 완전일치(공백/대소문자 무시)로 테이블 탐색"""
+    norm = func.trim(func.lower(name))
+    for category, Model in _MODEL_ORDER:
+        row = (
+            db.query(Model)
+              .filter(func.trim(func.lower(Model.name)) == norm)
+              .first()
+        )
+        if row:
+            return category, row
+    return None, None
+
+def _extract_fields(category: str, row) -> dict:
+    """테이블별 레코드를 공통 출력 필드로 정규화"""
+    address = getattr(row, "address", None)
+    description = getattr(row, "description", None)
+    image_url = getattr(row, "image_url", None)
+
+    image_urls: List[str] = []
+    if image_url:
+        image_urls = [image_url]  # 단일 컬럼 → 리스트로 래핑
+
+    return {
+        "address": address,
+        "category": category,
+        "description": description,
+        "image_urls": image_urls,
+    }
+
+@router.post("/itinerary", response_model=ItineraryOut, tags=["Schedule"])
+def build_itinerary(payload: PlacesByDayInput, db: Session = Depends(get_db)):
+    """
+    최종 여행일정표 출력용 API (저장/영속화 없음)
+    - 입력: places_by_day[{ name, arrival_str, departure_str, service_time }]
+    - 처리: DB에서 장소 상세정보(address/category/description/image) 보강
+    - 출력: places_by_day 동일 키 구조로 반환
+    """
+    if not payload.places_by_day:
+        raise HTTPException(status_code=400, detail="places_by_day is empty")
+
+    result: Dict[str, List[ItineraryPlaceOut]] = {}
+
+    for day_key, items in payload.places_by_day.items():
+        day_key_str = str(day_key)
+        result[day_key_str] = []
+
+        for p in items:
+            category, row = _find_place_by_name(db, p.name)
+
+            if not row:
+                # 못 찾았어도 기본 구조는 유지
+                result[day_key_str].append(
+                    ItineraryPlaceOut(
+                        name=p.name,
+                        address=None,
+                        category=None,
+                        arrival_str=p.arrival_str,
+                        departure_str=p.departure_str,
+                        service_time=p.service_time,
+                        description=None,
+                        image_urls=[],
+                    )
+                )
+                continue
+
+            fields = _extract_fields(category, row)
+            result[day_key_str].append(
+                ItineraryPlaceOut(
+                    name=p.name,
+                    address=fields["address"],
+                    category=fields["category"],
+                    arrival_str=p.arrival_str,
+                    departure_str=p.departure_str,
+                    service_time=p.service_time,
+                    description=fields["description"],
+                    image_urls=fields["image_urls"],
+                )
+            )
+
+    return ItineraryOut(places_by_day=result)

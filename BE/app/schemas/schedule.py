@@ -1,5 +1,5 @@
 #schemas\schedule.py
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 
 # ------------------- /init 요청 -------------------
@@ -87,3 +87,28 @@ class SchedulePerDayOutput(BaseModel):
     places: List[PlaceResult]
     user: UserPreference
     day_info: DayInfo
+
+# ------------------- /itinerary 요청 -------------------
+class PlaceTimeInput(BaseModel):
+    name: str = Field(..., description="장소 이름")
+    arrival_str: Optional[str] = Field(None, description="도착 시간 문자열")
+    departure_str: Optional[str] = Field(None, description="출발 시간 문자열")
+    service_time: Optional[int] = Field(None, description="체류 시간(분)")
+
+class PlacesByDayInput(BaseModel):
+    # "1": [ ... ], "2": [ ... ] 형태 (키가 str/int 모두 허용)
+    places_by_day: Dict[str, List[PlaceTimeInput]]
+
+# ------------------- /itinerary 응답 -------------------
+class ItineraryPlaceOut(BaseModel):
+    name: str
+    address: Optional[str] = None
+    category: Optional[str] = None
+    arrival_str: Optional[str] = None
+    departure_str: Optional[str] = None
+    service_time: Optional[int] = None
+    description: Optional[str] = None
+    image_urls: List[str] = []
+
+class ItineraryOut(BaseModel):
+    places_by_day: Dict[str, List[ItineraryPlaceOut]]

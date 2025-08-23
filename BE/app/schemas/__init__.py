@@ -9,5 +9,8 @@ from .schedule import (
     PlaceResult,
     UserPreference,
     DayInfo,
-    SchedulePerDayOutput
+    SchedulePerDayOutput,
+    PlacesByDayInput, 
+    ItineraryOut, 
+    ItineraryPlaceOut
 )

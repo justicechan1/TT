@@ -22,7 +22,8 @@ class JejuTourism(Base):
     service_time = Column(String(255))
     closed_days = Column(String(255))
     image_url = Column(Text)
-
+    description = Column(Text)
+    
     @property
     def id(self):
         return self.tour_id
