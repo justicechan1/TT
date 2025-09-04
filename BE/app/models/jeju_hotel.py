@@ -1,39 +1,25 @@
-#models/jeju_hotel.py
-from sqlalchemy import Column, Integer, String, Float, Text, DECIMAL
-from app.database import Base
+# app/models/jeju_hotel.py
+from sqlalchemy import Column, Integer, String, Text, Float, Numeric, BigInteger
+from .base import Base
 
 class JejuHotel(Base):
     __tablename__ = "hotel"
 
-    hotel_id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(255))
-    category = Column(String(255))
-    page_url = Column(Text)
-    score = Column(Float)
-    address = Column(Text)
-    phone = Column(String(100))
-    convenience = Column(Text)
-    website = Column(Text)
-    y_cord = Column(DECIMAL(10, 7))
-    x_cord = Column(DECIMAL(10, 7))
-    open_time = Column(String(255))
-    close_time = Column(String(255))
-    break_time = Column(String(255))
-    service_time = Column(String(255))
-    closed_days = Column(String(255))
-    image_url = Column(Text)
-
-    @property
-    def id(self):
-        return self.hotel_id
-
-class JejuhotelHashtag(Base):
-    __tablename__ = "hotel_hashtag"  
-
-    hashtag_id = Column(Integer, primary_key=True)  
-    hotel_id = Column(Integer)
-    hashtag = Column(String(100))  
-    embeddings = Column(Text)
-
-    class Config:
-        from_attributes = True
+    hotel_id    = Column(Integer, primary_key=True, autoincrement=True)
+    name        = Column(String(255), nullable=True)
+    category    = Column(String(255), nullable=True)
+    page_url    = Column(Text, nullable=True)
+    score       = Column(Float, nullable=True)
+    address     = Column(Text, nullable=True)
+    phone       = Column(String(100), nullable=True)
+    convenience = Column(Text, nullable=True)
+    website     = Column(Text, nullable=True)
+    y_cord      = Column(Numeric(10, 7), nullable=True)
+    x_cord      = Column(Numeric(10, 7), nullable=True)
+    open_time   = Column(String(255), nullable=True)
+    close_time  = Column(String(255), nullable=True)
+    break_time  = Column(String(255), nullable=True)
+    service_time= Column(String(255), nullable=True)
+    closed_days = Column(String(255), nullable=True)
+    image_url   = Column(Text, nullable=True)
+    price       = Column(BigInteger, nullable=True)

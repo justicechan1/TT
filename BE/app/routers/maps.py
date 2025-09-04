@@ -1,205 +1,155 @@
-# router/maps.py
-
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-import re
-from typing import List
-from app.cache import selected_category_cache
+from sqlalchemy import func, and_
+from typing import Dict, Tuple
 from app.database import get_db
-import json 
-import numpy as np
-from app.models.jeju_cafe import JejuCafe, JejuCafeHashtag
-from app.models.jeju_restaurant import JejuRestaurant, JejurestaurantHashtag
-from app.models.jeju_tourism import JejuTourism, JejutourismHashtag
-from app.models.jeju_hotel import JejuHotel, JejuhotelHashtag
-from app.models.jeju_transport import JejuTransport
-from app.schemas.maps import (
-    HashtagInput, HashtagOutput, TagInfo,
-    MoveInput, MoveResponse, MoveInfo,
-    Viewport
+
+from app.models.hashtag import Hashtag
+from app.models.hashtag_mapping import (
+    CafeHashtagMap, HotelHashtagMap, RestaurantHashtagMap, TourHashtagMap
 )
-from app.core.search import search_similar_places
+from app.models.jeju_cafe import JejuCafe
+from app.models.jeju_hotel import JejuHotel
+from app.models.jeju_restaurant import JejuRestaurant
+from app.models.jeju_tour import JejuTour
+
+from app.schemas.maps import (
+    HashtageIn, HashtageOut, HashtagOnly,
+    SelectHashtageIn, SelectHashtageOut, SelectHashtageOutItem
+)
+from ._utils import to_float, cos_sim, avg_vec
 
 router = APIRouter(prefix="/api/users/maps", tags=["maps"])
 
-PLACE_MODELS = {
-    "cafe": (JejuCafe, JejuCafeHashtag),
-    "restaurant": (JejuRestaurant, JejurestaurantHashtag),
-    "tourist": (JejuTourism, JejutourismHashtag),
-    "accommodation": (JejuHotel, JejuhotelHashtag),
-    "transport": (JejuTransport, None)
+# 카테고리 표기(한글/영문/대소문자) 정규화
+CATEGORY_ALIAS: Dict[str, str] = {
+    "cafe": "cafe", "카페": "cafe", "Cafe": "cafe", "CAFE": "cafe",
+    "hotel": "hotel", "숙소": "hotel", "Hotel": "hotel", "HOTEL": "hotel",
+    "restaurant": "restaurant", "음식점": "restaurant",
+    "Restaurant": "restaurant", "RESTAURANT": "restaurant",
+    "tour": "tour", "관광지": "tour", "Tour": "tour", "TOUR": "tour",
 }
 
-PRIMARY_KEY_FIELDS = {
-    "cafe": "cafe_id",
-    "restaurant": "restaurant_id",
-    "tourist": "tour_id",
-    "accommodation": "hotel_id"
+def _norm_cat(c: str) -> str:
+    return CATEGORY_ALIAS.get(c, c).lower()
+
+# JOIN_INFO: (PlaceModel, MapModel, fk_on_map, pk_on_place, x_col, y_col)
+JOIN_INFO: Dict[str, Tuple] = {
+    "cafe": (
+        JejuCafe,
+        CafeHashtagMap,
+        CafeHashtagMap.cafe_id,     # fk: map.cafe_id
+        JejuCafe.cafe_id,           # pk: cafe.cafe_id
+        JejuCafe.x_cord,
+        JejuCafe.y_cord,
+    ),
+    "hotel": (
+        JejuHotel,
+        HotelHashtagMap,
+        HotelHashtagMap.hotel_id,
+        JejuHotel.hotel_id,
+        JejuHotel.x_cord,
+        JejuHotel.y_cord,
+    ),
+    "restaurant": (
+        JejuRestaurant,
+        RestaurantHashtagMap,
+        RestaurantHashtagMap.restaurant_id,
+        JejuRestaurant.restaurant_id,
+        JejuRestaurant.x_cord,
+        JejuRestaurant.y_cord,
+    ),
+    "tour": (
+        JejuTour,
+        TourHashtagMap,
+        TourHashtagMap.tour_id,
+        JejuTour.tour_id,
+        JejuTour.x_cord,
+        JejuTour.y_cord,
+    ),
 }
 
-# ---------- /hashtage ----------
-@router.post("/hashtage", response_model=HashtagOutput)
-def get_hashtags(input_data: HashtagInput, db: Session = Depends(get_db)):
-    category = input_data.category.lower()
-    viewport = input_data.viewport
+def _viewport_filter(x_col, y_col, vp):
+    # 좌표가 문자열로 들어와도 안전하게 float 비교
+    min_x = to_float(vp.min_x)
+    max_x = to_float(vp.max_x)
+    min_y = to_float(vp.min_y)
+    max_y = to_float(vp.max_y)
+    return and_(
+        x_col >= min_x, x_col <= max_x,
+        y_col >= min_y, y_col <= max_y
+    )
 
-    if category not in PLACE_MODELS:
-        raise HTTPException(status_code=400, detail="Invalid category")
+@router.post("/hashtage", response_model=HashtageOut)
+def hashtage(req: HashtageIn, db: Session = Depends(get_db)):
+    cat = _norm_cat(req.category)
+    if cat not in JOIN_INFO:
+        return HashtageOut(tag=[])
 
-    # 카테고리 캐시 저장
-    selected_category_cache["current"] = category
+    Place, Map, fk_on_map, pk_on_place, x_c, y_c = JOIN_INFO[cat]
 
-    PlaceModel, HashtagModel = PLACE_MODELS[category]
-    pk_field = getattr(PlaceModel, PRIMARY_KEY_FIELDS[category])
-    fk_field = getattr(HashtagModel, PRIMARY_KEY_FIELDS[category])
+    rows = (
+        db.query(Hashtag.hashtag, func.count().label("cnt"))
+        .join(Map, Map.hashtag_id == Hashtag.hashtag_id)
+        .join(Place, fk_on_map == pk_on_place)
+        .filter(_viewport_filter(x_c, y_c, req.viewport))
+        .group_by(Hashtag.hashtag)
+        .order_by(func.count().desc())
+        .all()
+    )
+    return HashtageOut(tag=[HashtagOnly(hashtag=h) for (h, _) in rows])
 
-    subquery = db.query(pk_field).filter(
-        PlaceModel.x_cord.between(viewport.min_x, viewport.max_x),
-        PlaceModel.y_cord.between(viewport.min_y, viewport.max_y)
-    ).subquery()
+@router.post("/select_hashtage", response_model=SelectHashtageOut)
+def select_hashtage(req: SelectHashtageIn, db: Session = Depends(get_db)):
+    """
+    선택 해시태그들의 임베딩 평균 → 후보 장소(같은 카테고리)의 해시태그 임베딩 평균과 코사인 유사도
+    """
+    cat = _norm_cat(req.category)
+    if cat not in JOIN_INFO or not req.tag:
+        return SelectHashtageOut(select_hashtage=[])
 
-    hashtag_rows = db.query(HashtagModel.hashtag).filter(
-        fk_field.in_(subquery),
-        HashtagModel.hashtag.isnot(None)
-    ).all()
+    Place, Map, fk_on_map, pk_on_place, x_c, y_c = JOIN_INFO[cat]
 
-    unique_tags = set()
-    for row in hashtag_rows:
-        if not row.hashtag:
-            continue
-        try:
-            tags = re.findall(r'#\w+', row.hashtag)
-            unique_tags.update(tags)
-        except Exception as e:
-            print(f"❌ 해시태그 파싱 실패: {e}")
+    # 1) 선택 태그 임베딩 평균
+    sel_tags = [t.hashtag for t in req.tag]
+    tag_rows = (
+        db.query(Hashtag)
+        .filter(func.lower(Hashtag.hashtag).in_([t.lower() for t in sel_tags]))
+        .all()
+    )
+    sel_vec = avg_vec([list(h.embeddings or []) for h in tag_rows])
+    if not sel_vec:
+        return SelectHashtageOut(select_hashtage=[])
 
-    return HashtagOutput(tag=[TagInfo(hashtag=tag) for tag in unique_tags])
+    # 2) 후보 장소 추출(뷰포트 내)
+    places = (
+        db.query(Place)
+        .filter(_viewport_filter(x_c, y_c, req.viewport))
+        .limit(2000)
+        .all()
+    )
 
-# ---------- Viewport 내 장소 조회 ----------
-def get_places_in_viewport(category: str, viewport: Viewport, db: Session) -> List[MoveInfo]:
-    if category not in PLACE_MODELS:
-        raise HTTPException(status_code=400, detail="Invalid category")
-
-    PlaceModel, _ = PLACE_MODELS[category]
-
-    places = db.query(PlaceModel).filter(
-        PlaceModel.x_cord.between(viewport.min_x, viewport.max_x),
-        PlaceModel.y_cord.between(viewport.min_y, viewport.max_y)
-    ).all()
-
+    # 3) 각 장소의 태그 임베딩 평균 → 코사인 유사도
     results = []
-    for place in places:
-        results.append(MoveInfo(
-            name=place.name,
-            x_cord=float(place.x_cord),
-            y_cord=float(place.y_cord)
+    for p in places:
+        pid = getattr(p, pk_on_place.key)  
+
+        tag_rows = (
+            db.query(Hashtag.embeddings, Hashtag.hashtag)
+            .join(Map, Map.hashtag_id == Hashtag.hashtag_id)
+            .filter(fk_on_map == pid)     
+            .all()
+        )
+        place_vec = avg_vec([list(e or []) for (e, _) in tag_rows])
+        sim = cos_sim(sel_vec, place_vec) if place_vec else 0.0
+
+        results.append(SelectHashtageOutItem(
+            name=getattr(p, "name", ""),      
+            category=cat,
+            x_cord=to_float(p.x_cord) or 0.0,
+            y_cord=to_float(p.y_cord) or 0.0,
+            similarity=float(sim)
         ))
 
-    return results
-
-# ---------- 장소별 해시태그 임베딩 수집 ----------
-def collect_place_embeddings(db, PlaceModel, HashtagModel, pk_field_name, viewport):
-    places = db.query(PlaceModel).filter(
-        PlaceModel.x_cord.between(viewport.min_x, viewport.max_x),
-        PlaceModel.y_cord.between(viewport.min_y, viewport.max_y)
-    ).all()
-
-    embedding_logs = []
-    for place in places:
-        place_id = getattr(place, pk_field_name)
-        if HashtagModel:
-            rows = db.query(HashtagModel.embeddings).filter(
-                getattr(HashtagModel, pk_field_name) == place_id,
-                HashtagModel.embeddings.isnot(None)
-            ).all()
-            emb_list = []
-            for e in rows:
-                try:
-                    parsed = json.loads(e[0])  # 🔥 문자열 → 리스트
-                    emb_list.append(np.array(parsed, dtype=np.float32).reshape(1, -1))
-                except Exception as err:
-                    print(f"[❌ 임베딩 파싱 오류] {e[0]} → {err}")
-            if emb_list:
-                embedding_logs.append({
-                    "id": place_id,
-                    "embedding": np.vstack(emb_list)
-                })
-    return embedding_logs
-
-# ---------- 선택된 해시태그 벡터 수집 ----------
-def collect_selected_embeddings(db, HashtagModel, tags, seen_embeddings: set):
-    selected = []
-    for tag in tags:
-        rows = db.query(HashtagModel.hashtag, HashtagModel.embeddings).filter(
-            HashtagModel.hashtag.like(f"%{tag}%")
-        ).all()
-        for name, embedding in rows:
-            if embedding is None:
-                continue
-            try:
-                key = embedding.strip()
-                if key in seen_embeddings:
-                    continue
-                seen_embeddings.add(key)
-                parsed = json.loads(embedding)  # 🔥 문자열 → 리스트
-                selected.append(np.array(parsed, dtype=np.float32).reshape(1, -1))
-            except Exception as err:
-                print(f"[❌ 선택 해시태그 임베딩 파싱 실패] {embedding} → {err}")
-    return selected
-
-
-# ---------- 유사도 기반 상위 장소 ID 추출 ----------
-def get_top_place_ids(selected_embeddings, embedding_logs):
-    top_ids = set()
-    for query_vector in selected_embeddings:
-        top_results = search_similar_places(query_vector.T, embedding_logs, top_k=5)
-        for res in top_results:
-            top_ids.add(res["place_id"])
-    return top_ids
-
-# ---------- 최종 MoveInfo 응답 생성 ----------
-def build_filtered_move_response_with_similarity(db, PlaceModel, pk_field_name, top_results, category: str):
-    move_infos = []
-
-    for res in top_results:
-        pid = res["place_id"]
-        similarity = res["similarity"]
-        db_place = db.query(PlaceModel).filter(getattr(PlaceModel, pk_field_name) == pid).first()
-        if db_place:
-            move_infos.append({
-                "name": db_place.name,
-                "category": category,
-                "x_cord": float(db_place.x_cord),
-                "y_cord": float(db_place.y_cord),
-                "similarity": similarity
-            })
-    return move_infos
-
-# ---------- /select_hashtage ----------
-@router.post("/select_hashtage", response_model=MoveResponse)
-def get_move_candidates(input_data: MoveInput, db: Session = Depends(get_db)):
-    viewport = input_data.viewport
-    tags = [t.hashtag for t in input_data.tag]
-    category = input_data.category.lower()
-
-    if category not in PLACE_MODELS:
-        raise HTTPException(status_code=400, detail="Invalid category")
-    
-    selected_category_cache["current"] = category
-
-    PlaceModel, HashtagModel = PLACE_MODELS[category]
-    pk_field_name = PRIMARY_KEY_FIELDS[category]
-
-    embedding_logs = collect_place_embeddings(db, PlaceModel, HashtagModel, pk_field_name, viewport)
-    selected_embeddings = collect_selected_embeddings(db, HashtagModel, tags, seen_embeddings=set())
-
-    all_top_results = []
-    for query_vector in selected_embeddings:
-        all_top_results.extend(search_similar_places(query_vector.T, embedding_logs, top_k=5))
-
-    # 중복제거후 유사도 높은 순으로
-    unique_results = {res["place_id"]: res for res in sorted(all_top_results, key=lambda x: x["similarity"], reverse=True)}
-    filtered_places = build_filtered_move_response_with_similarity(db, PlaceModel, pk_field_name, list(unique_results.values()), category)
-
-    return MoveResponse(select_hashtage=filtered_places)
+    results.sort(key=lambda x: x.similarity, reverse=True)
+    return SelectHashtageOut(select_hashtage=results[:100])

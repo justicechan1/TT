@@ -1,39 +1,41 @@
-# schemas/maps.py
-
+from typing import List
 from pydantic import BaseModel
-from typing import List, Optional
 
-# ---------- 해시태그 (Hashtage) ----------
 
-class TagInfo(BaseModel):
-    hashtag: str
-
+# ---------- /api/users/maps /hashtage ----------
+# Input
 class Viewport(BaseModel):
     min_x: float
     min_y: float
     max_x: float
     max_y: float
 
-class HashtagInput(BaseModel):
+class HashtageIn(BaseModel):
     category: str
     viewport: Viewport
 
-class HashtagOutput(BaseModel):
-    tag: List[TagInfo]
+# Output
+class HashtagOnly(BaseModel):
+    hashtag: str
 
-# ---------- 지도 새로고침 (select_hashtage) ----------
+class HashtageOut(BaseModel):
+    tag: List[HashtagOnly]
 
-class MoveInfo(BaseModel):
+
+# ---------- /api/users/maps /select_hashtage ----------
+# Input
+class SelectHashtageIn(BaseModel):
+    category: str
+    tag: List[HashtagOnly]
+    viewport: Viewport
+
+# Output
+class SelectHashtageOutItem(BaseModel):
     name: str
     category: str
     x_cord: float
     y_cord: float
-    similarity: Optional[float] = None
+    similarity: float
 
-class MoveInput(BaseModel):
-    category: str
-    tag: List[TagInfo]
-    viewport: Viewport
-
-class MoveResponse(BaseModel):
-    select_hashtage: List[MoveInfo]
+class SelectHashtageOut(BaseModel):
+    select_hashtage: List[SelectHashtageOutItem]

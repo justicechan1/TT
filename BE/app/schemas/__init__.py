@@ -1,16 +1,4 @@
-#app/schemas/init.py
-from .schedule import (
-    DateInfo,
-    ScheduleInitInput,
-    ScheduleInitOutput,
-    PlaceSimpleInput,
-    PlaceWithServiceTime,
-    NewScheduleInput,
-    PlaceResult,
-    UserPreference,
-    DayInfo,
-    SchedulePerDayOutput,
-    PlacesByDayInput, 
-    ItineraryOut, 
-    ItineraryPlaceOut
-)
+# app/schemas/__init__.py
+from .schedules import *
+from .maps import *
+from .places import *

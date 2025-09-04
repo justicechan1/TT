@@ -1,43 +1,30 @@
-#schemas/places.py
+from typing import List
 from pydantic import BaseModel
-from typing import List, Optional, Dict
 
 
-# ------------------- /api/places/edit -------------------
-class PlaceNameOnly(BaseModel):
+# ---------- /api/places /select_place ----------
+# Input은 쿼리스트링 name 이므로 별도 요청 모델 불필요
+# Output
+class PlaceDetail(BaseModel):
     name: str
-
-class PlaceSearchRequest(BaseModel):
-    name: str
-    
-class PlaceEditInput(BaseModel):
-    user_id: str
-    places_by_day: Dict[int, List[PlaceNameOnly]]
-
-class PlaceEditOutput(BaseModel):
-    places_by_day: Dict[int, List[PlaceNameOnly]]
-
-# ------------------- /api/places/search -------------------
-class PlaceSearchResult(BaseModel):
-    name: str
-
-class PlaceSearchOutput(BaseModel):
-    search: List[PlaceSearchResult]
-
-# ------------------- /api/places/data -------------------
-class PlaceDataResult(BaseModel):
-    name: str
-    category: Optional[str] = None
+    category: str
     address: str
-    x_cord: Optional[float] = None
-    y_cord: Optional[float] = None
-    open_time: Optional[str] = None
-    close_time: Optional[str] = None
-    convenience: Optional[str] = None
-    image_urls: List[str] = []
+    x_cord: float
+    y_cord: float
+    open_time: str
+    close_time: str
+    convenience: str
+    image_urls: List[str]
 
-    class Config:
-        from_attributes = True
+class SelectPlaceResponse(BaseModel):
+    places: PlaceDetail
 
-class PlaceDataResponse(BaseModel):
-    places: PlaceDataResult
+
+# ---------- /api/places /search ----------
+# Input은 쿼리스트링 name
+# Output
+class SearchOutItem(BaseModel):
+    name: str
+
+class SearchOut(BaseModel):
+    search: List[SearchOutItem]
