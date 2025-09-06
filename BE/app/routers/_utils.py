@@ -1,7 +1,12 @@
 import json
+import math
 from decimal import Decimal
 from typing import Any, Iterable, List, Optional
 
+import numpy as np
+
+
+# 주어진 값을 float로 변환(문자열/Decimal 허용)
 def to_float(v: Any) -> Optional[float]:
     if v is None:
         return None
@@ -12,6 +17,8 @@ def to_float(v: Any) -> Optional[float]:
     except Exception:
         return None
 
+
+# 이미지 URL 문자열을 리스트로 변환
 def parse_image_url(text: Optional[str]) -> Optional[List[str]]:
     if not text:
         return None
@@ -22,28 +29,47 @@ def parse_image_url(text: Optional[str]) -> Optional[List[str]]:
         if isinstance(data, str):
             return [data]
     except Exception:
-        # 콤마구분 등 느슨 파서
+        # 콤마 구분 등 느슨 파서
         return [s.strip() for s in str(text).split(",") if s.strip()]
     return None
 
-def cos_sim(a: List[float], b: List[float]) -> float:
-    import math
-    if not a or not b:
-        return 0.0
-    n = min(len(a), len(b))
-    aa = a[:n]; bb = b[:n]
-    dot = sum(x*y for x, y in zip(aa, bb))
-    na = math.sqrt(sum(x*x for x in aa)) or 1e-9
-    nb = math.sqrt(sum(y*y for y in bb)) or 1e-9
-    return dot / (na * nb)
 
-def avg_vec(vectors: Iterable[List[float]]) -> List[float]:
-    vs = [v for v in vectors if v]
-    if not vs:
-        return []
-    n = max(len(v) for v in vs)
-    sums = [0.0]*n; cnt = [0]*n
-    for v in vs:
-        for i, x in enumerate(v):
-            sums[i] += float(x); cnt[i] += 1
-    return [ (s / c if c else 0.0) for s, c in zip(sums, cnt) ]
+# 벡터 유틸 (안전한 평균/정규화/코사인 계산을 위해 NumPy 사용)
+def _clean_vec(v) -> Optional[np.ndarray]:
+    """입력(JSON list/ndarray)을 1D np.ndarray[float]로 안전 변환."""
+    if v is None:
+        return None
+    try:
+        a = np.asarray(v, dtype=float).reshape(-1)
+    except Exception:
+        return None
+    if a.size == 0 or not np.isfinite(a).all():
+        return None
+    return a
+
+
+def avg_vec(vectors: Iterable[Iterable[float]]) -> np.ndarray:
+    arrs: List[np.ndarray] = []
+    for v in vectors:
+        a = _clean_vec(v)
+        if a is not None:
+            arrs.append(a)
+    if not arrs:
+        return np.array([], dtype=float)
+
+    d = min(a.shape[0] for a in arrs)
+    if d == 0:
+        return np.array([], dtype=float)
+
+    stacked = np.vstack([a[:d] for a in arrs])  # (N, d)
+    return stacked.mean(axis=0)                 # (d,)
+
+
+def normalize_vectors(v: np.ndarray) -> np.ndarray:
+    a = _clean_vec(v)
+    if a is None or a.size == 0:
+        return np.asarray(v, dtype=float).reshape(-1) if v is not None else np.array([], dtype=float)
+    n = np.linalg.norm(a)
+    if n == 0.0 or not np.isfinite(n):
+        return a
+    return a / n
