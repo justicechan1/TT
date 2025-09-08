@@ -84,6 +84,9 @@ class PlaceItineraryOut(BaseModel):
     name: str
     address: str
     category: str
+    open_time: str = ""
+    close_time: str = ""
+    convenience: List[str]
     arrival_str: str
     departure_str: str
     service_time: int

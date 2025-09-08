@@ -18,7 +18,7 @@ from app.schemas.schedules import (
     ItineraryRequest, ItineraryResponse, PlaceItineraryOut
 )
 
-from ._utils import to_float, parse_image_url
+from ._utils import to_float, parse_image_url, parse_convenience
 
 router = APIRouter(prefix="/api/users/schedules", tags=["schedules"])
 
@@ -111,6 +111,10 @@ def itinerary(req: ItineraryRequest, db: Session = Depends(get_db)):
             # description 없는 테이블은 None → 빈 문자열 처리
             desc = getattr(row, "description", None) or ""
 
+            open_t = getattr(row, "open_time", None) or ""
+            close_t = getattr(row, "close_time", None) or ""
+            conv_list = parse_convenience(getattr(row, "convenience", None))
+
             day_list.append(PlaceItineraryOut(
                 name=row.name,
                 address=row.address or "",
@@ -119,7 +123,10 @@ def itinerary(req: ItineraryRequest, db: Session = Depends(get_db)):
                 departure_str=it.departure_str,
                 service_time=it.service_time,
                 description=desc,
-                image_urls=imgs
+                image_urls=imgs,
+                open_time=open_t,
+                close_time=close_t,
+                convenience=conv_list
             ))
         out[int(day)] = day_list
     return ItineraryResponse(places_by_day=out)
