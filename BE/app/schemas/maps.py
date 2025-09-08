@@ -22,7 +22,7 @@ class HashtageOut(BaseModel):
     tag: List[HashtagOnly]
 
 
-# ---------- /api/users/maps /select_hashtage ----------
+# ---------- /api/users/mapselect_hashtage ----------
 # Input
 class SelectHashtageIn(BaseModel):
     category: str
@@ -39,3 +39,13 @@ class SelectHashtageOutItem(BaseModel):
 
 class SelectHashtageOut(BaseModel):
     select_hashtage: List[SelectHashtageOutItem]
+
+
+# ---------- /api/users/mapselect_hashtage ----------
+# input
+class LocalHashtagIn(BaseModel):
+    local_name: str
+
+# Output
+class LocalHashtagOut(BaseModel):
+    tag: List[HashtagOnly]

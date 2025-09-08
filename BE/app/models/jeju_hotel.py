@@ -23,3 +23,4 @@ class JejuHotel(Base):
     closed_days = Column(String(255), nullable=True)
     image_url   = Column(Text, nullable=True)
     price       = Column(BigInteger, nullable=True)
+    location_code = Column(Integer, nullable=True)

@@ -24,3 +24,4 @@ class JejuTour(Base):
     image_url   = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
     price       = Column(BigInteger, nullable=True)
+    location_code = Column(Integer, nullable=True)
